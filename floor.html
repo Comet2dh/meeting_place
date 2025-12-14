@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>会议选址动态演示（数字精确版）</title>
+    <style>
+        :root {
+            --floor-height: 80px; 
+            --building-width: 320px;
+            --primary-color: #3498db;
+            --success-color: #2ecc71;
+            --warning-color: #f1c40f;
+            --text-color: #333;
+            --bg-color: #f0f2f5;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { color: #2c3e50; margin-bottom: 5px; }
+        
+        .description {
+            max-width: 800px;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .main-content {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 40px;
+            width: 95%;
+            max-width: 1200px;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        }
+
+        /* --- 左侧：大楼区域 --- */
+        .building-wrapper {
+            position: relative;
+            padding-right: 200px; /* 增加右侧空间，用于显示数字标签 */
+        }
+
+        .building-container {
+            display: flex;
+            flex-direction: column-reverse; /* 1楼在底部 */
+            width: var(--building-width);
+            border: 3px solid #34495e;
+            border-bottom: 5px solid #2c3e50; 
+            background: #ecf0f1;
+            position: relative;
+        }
+
+        .floor {
+            height: var(--floor-height);
+            border-top: 1px dashed #bdc3c7;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 15px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            box-sizing: border-box;
+        }
+        
+        .building-container .floor:last-child { border-top: none; }
+
+        .floor:hover { background-color: #dfe6e9; }
+        .floor.active-target { background-color: #e8f6f3; }
+
+        .floor-label {
+            font-size: 1.4em;
+            font-weight: 800;
+            color: #7f8c8d;
+            width: 40px;
+        }
+
+        .person-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .person-control input {
+            width: 40px;
+            padding: 5px;
+            text-align: center;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .person-icons {
+            display: flex;
+            gap: 2px;
+            min-width: 60px;
+        }
+
+        .icon {
+            width: 12px;
+            height: 12px;
+            background-color: var(--primary-color);
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* --- 会议点 (浮动圆球) --- */
+        .meeting-point {
+            position: absolute;
+            right: -25px; /* 在大楼右侧，且与右侧数字标签有间隔 */
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #f1c40f, #f39c12);
+            border: 3px solid #fff;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #fff;
+            z-index: 20;
+            transition: bottom 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            cursor: default;
+        }
+
+        /* --- 距离数字标签区域 (新的侧边显示) --- */
+        .distance-info {
+            position: absolute;
+            right: -190px; /* 定位在最右侧 */
+            width: 180px;
+            height: var(--floor-height);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-start;
+            font-size: 0.9em;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .distance-info.visible {
+            opacity: 1;
+        }
+
+        .distance-text {
+            color: #7f8c8d;
+            margin-bottom: 2px;
+            white-space: nowrap;
+        }
+
+        .total-climb {
+            color: var(--text-color);
+            font-weight: bold;
+            font-size: 1.1em;
+            white-space: nowrap;
+        }
+
+        /* --- 右侧：结果面板 --- */
+        .results-panel {
+            min-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            border-left: 5px solid var(--primary-color);
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        .row-best { 
+            background-color: #e8f8f5; 
+            border: 2px solid var(--success-color); 
+            color: var(--success-color);
+            font-weight: bold;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>🏢 会议选址：数字精确演示</h1>
+    <p class="description">
+        <b>玩法：</b>点击不同楼层，改变会议地点。<br>
+        在右侧数字标签区可实时看到该层 **[楼层距离]**、**[参会人数]** 和由此产生的 **[单层总爬楼数]**。
+    </p>
+
+    <div class="main-content">
+        
+        <div class="building-wrapper">
+            <div class="building-container" id="building">
+                </div>
+            <div class="meeting-point" id="meeting-point">会</div>
+        </div>
+
+        <div class="results-panel">
+            <div class="stat-card">
+                <div style="font-size: 0.9em; color: #7f8c8d;">当前会议设在</div>
+                <div style="font-size: 1.5em; font-weight: bold;" id="current-floor-display">--</div>
+                <div style="margin-top: 10px; font-size: 0.9em; color: #7f8c8d;">当前总爬楼距离</div>
+                <div style="font-size: 2em; font-weight: bold; color: var(--primary-color);" id="total-distance-display">0</div>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>楼层</th>
+                            <th>总距离</th>
+                            <th>评价</th>
+                        </tr>
+                    </thead>
+                    <tbody id="comparison-table">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const FLOORS = 5;
+        const FLOOR_HEIGHT = 80; 
+        const MEETING_POINT_SIZE = 50; 
+        let peopleCounts = [2, 1, 2, 1, 1]; // 1F, 2F, 3F, 4F, 5F
+        let currentMeetingFloorIdx = 2; // 默认为索引2 (3楼)
+
+        // 初始化
+        function init() {
+            renderBuilding();
+            updateCalculations(currentMeetingFloorIdx);
+        }
+
+        // 渲染大楼结构
+        function renderBuilding() {
+            const container = document.getElementById('building');
+            container.innerHTML = '';
+
+            for (let i = 0; i < FLOORS; i++) {
+                const floorNum = i + 1;
+                
+                const floorDiv = document.createElement('div');
+                floorDiv.className = 'floor';
+                floorDiv.id = `floor-${i}`;
+                floorDiv.onclick = () => {
+                    currentMeetingFloorIdx = i;
+                    updateCalculations(i);
+                };
+
+                // 生成小人图标
+                const iconsHtml = Array(peopleCounts[i]).fill('<span class="icon"></span>').join('');
+
+                floorDiv.innerHTML = `
+                    <div class="floor-label">${floorNum}F</div>
+                    <div class="person-control">
+                        <div class="person-icons">${iconsHtml}</div>
+                        <input type="number" min="0" value="${peopleCounts[i]}" 
+                               onclick="event.stopPropagation()" 
+                               onchange="handlePeopleChange(${i}, this.value)"
+                               oninput="handlePeopleChange(${i}, this.value)">
+                    </div>
+                    <div class="distance-info" id="info-${i}"></div>
+                `;
+                
+                container.appendChild(floorDiv);
+            }
+        }
+
+        // 处理人数变化
+        function handlePeopleChange(floorIdx, val) {
+            let num = parseInt(val);
+            if (isNaN(num) || num < 0) num = 0;
+            peopleCounts[floorIdx] = num;
+            
+            const iconContainer = document.querySelector(`#floor-${floorIdx} .person-icons`);
+            iconContainer.innerHTML = Array(peopleCounts[floorIdx]).fill('<span class="icon"></span>').join('');
+
+            updateCalculations(currentMeetingFloorIdx); 
+        }
+
+        // 核心更新逻辑
+        function updateCalculations(targetIdx) {
+            currentMeetingFloorIdx = targetIdx;
+
+            // 1. 移动会议球 (通过设置 bottom)
+            // bottom 定位公式： (目标楼层索引 * 楼层高度) + (楼层高度 / 2 - 会议球高度 / 2)
+            const meetingPoint = document.getElementById('meeting-point');
+            const bottomPos = (targetIdx * FLOOR_HEIGHT) + (FLOOR_HEIGHT / 2 - MEETING_POINT_SIZE / 2); 
+            meetingPoint.style.bottom = `${bottomPos}px`;
+            
+            // 2. 更新高亮状态
+            document.querySelectorAll('.floor').forEach((el, idx) => {
+                if (idx === targetIdx) el.classList.add('active-target');
+                else el.classList.remove('active-target');
+            });
+
+            // 3. 计算所有距离并更新标签 (核心逻辑：找到最优解)
+            let currentTotalDist = 0;
+            let comparisonData = [];
+            let bestFloors = [];
+            let minTotal = Infinity;
+
+            // 3a. 遍历所有楼层，计算各自的总距离，并找出所有最优解
+            for(let f=0; f<FLOORS; f++) {
+                let dist = 0;
+                for(let p=0; p<FLOORS; p++) {
+                    dist += peopleCounts[p] * Math.abs(f - p);
+                }
+                
+                if(dist < minTotal) {
+                    minTotal = dist;
+                    bestFloors = [f]; 
+                } else if (dist === minTotal) {
+                    bestFloors.push(f); 
+                }
+
+                comparisonData.push({ floor: f+1, dist: dist });
+            }
+            
+            // 3b. 绘制当前选择状态下的数字标签
+            for (let i = 0; i < FLOORS; i++) {
+                const infoDiv = document.getElementById(`info-${i}`);
+                const people = peopleCounts[i];
+                const floorDiff = Math.abs(targetIdx - i);
+                const totalClimb = floorDiff * people;
+
+                if (i === targetIdx) {
+                    currentTotalDist += 0;
+                    infoDiv.classList.remove('visible');
+                    infoDiv.innerHTML = '';
+                } else {
+                    currentTotalDist += totalClimb;
+                    infoDiv.classList.add('visible');
+                    infoDiv.innerHTML = `
+                        <div class="distance-text">距离: <b>${floorDiff}</b> 层 × <b>${people}</b> 人</div>
+                        <div class="total-climb">单层总爬楼: ${totalClimb} 层</div>
+                    `;
+                }
+            }
+
+            // 4. 更新右侧面板文字
+            document.getElementById('current-floor-display').innerText = `${targetIdx + 1}楼`;
+            document.getElementById('total-distance-display').innerText = currentTotalDist;
+
+            // 5. 更新对比表格
+            const tableBody = document.getElementById('comparison-table');
+            tableBody.innerHTML = '';
+            comparisonData.forEach(d => {
+                const row = document.createElement('tr');
+                
+                let evalText = '';
+                if(bestFloors.includes(d.floor - 1)) {
+                    row.className = 'row-best';
+                    evalText = '✅ 最优 (最短距离)';
+                } else {
+                    evalText = '❌ 较远';
+                }
+                
+                row.innerHTML = `
+                    <td>${d.floor}F</td>
+                    <td>${d.dist}</td>
+                    <td>${evalText}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>
